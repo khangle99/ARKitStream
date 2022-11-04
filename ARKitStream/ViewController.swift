@@ -24,10 +24,7 @@ class ViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        arRecorder = RecordAR(ARSceneKit: previewView)
-        arRecorder.renderAR = self
-        arRecorder.onlyRenderWhileRecording = false
-        
+        setupARRecord()
         arFilterManager = ARFilterManager()
         setupAR()
         setupLiveStream()
@@ -36,6 +33,13 @@ class ViewController: UIViewController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
             self?.liveStreamManager.startStream()
         }
+    }
+    
+    private func setupARRecord() {
+        arRecorder = RecordAR(ARSceneKit: previewView)
+        arRecorder.renderAR = self
+        arRecorder.enableAudio = false
+        arRecorder.onlyRenderWhileRecording = false
     }
     
     private func setupLiveStream() {

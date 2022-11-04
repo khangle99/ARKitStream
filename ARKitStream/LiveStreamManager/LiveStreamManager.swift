@@ -27,8 +27,8 @@ class LiveStreamManager: NSObject {
         streamerKit?.videoFPS = 24
         
         streamerKit?.streamerBase.bwEstimateMode = .estMode_Default
-        
-        streamerKit?.aCapDev.audioProcessingCallback = { [weak self] sampleBuffer in
+
+        streamerKit?.aMixer.audioProcessingCallback = { [weak self] sampleBuffer in
             guard let self = self,
                   let sampleBuffer = sampleBuffer else { return }
             if self.useKsyLiveAudioCap {
