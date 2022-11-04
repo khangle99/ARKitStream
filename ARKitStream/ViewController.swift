@@ -101,6 +101,6 @@ extension ViewController: LiveStreamManagerDelegate {
 
 extension ViewController: RenderARDelegate {
     func frame(didRender buffer: CVPixelBuffer, with time: CMTime, using rawBuffer: CVPixelBuffer) {
-        liveStreamManager.processVideoPixelBuffer(buffer, timeInfor: time)
+        //liveStreamManager.processVideoPixelBuffer(buffer, timeInfor: time) // push live
     }
 }
