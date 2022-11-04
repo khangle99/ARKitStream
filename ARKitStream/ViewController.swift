@@ -6,13 +6,97 @@
 //
 
 import UIKit
+import ARKit
+import ARVideoKit
+import GPUImage
+import libksygpulive
 
 class ViewController: UIViewController {
 
+    @IBOutlet weak var previewView: ARSCNView!
+    
+    private var liveStreamManager: LiveStreamManager!
+    
+    private var arFilterManager: ARFilterManager!
+    
+    private var arRecorder: RecordAR!
+    
     override func viewDidLoad() {
         super.viewDidLoad()
+        
+        arRecorder = RecordAR(ARSceneKit: previewView)
+        arRecorder.renderAR = self
+        arRecorder.onlyRenderWhileRecording = false
+        
+        arFilterManager = ARFilterManager()
+        setupAR()
+        setupLiveStream()
+        observeStreamState()
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            self?.liveStreamManager.startStream()
+        }
     }
-
+    
+    private func setupLiveStream() {
+        liveStreamManager = LiveStreamManager()
+        liveStreamManager.delegate = self
+        liveStreamManager.useKsyLiveAudioCap = true
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        
+        arFilterManager.startPreview(previewView)
+        liveStreamManager.startAudioCapture()
+    }
+    
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        previewView.session.pause()
+        liveStreamManager.stopAudioCapture()
+    }
+    
+    private func setupAR() {
+ 
+    }
+    
+    private func observeStreamState() {
+        NotificationCenter.default.addObserver(self, selector: #selector(onStreamStateChange(notification:)), name: NSNotification.Name.KSYStreamStateDidChange, object: nil)
+    }
+    
+    @objc func onStreamStateChange(notification: Notification) {
+        switch liveStreamManager.streamState {
+        case .idle:
+            print("state Idle")
+        case .connecting:
+            print("state Connecting")
+        case .connected:
+            print("state Connected")
+        case .disconnecting:
+            print("state Disconnecting")
+        case .error:
+            print("state Error:")
+        default:
+            break
+        }
+    }
 
 }
 
+// MARK: LiveStreamManagerDelegate
+extension ViewController: LiveStreamManagerDelegate {
+    func didStartStream() {
+        print("didStart")
+    }
+    
+    func didStopStream() {
+        print("didStop")
+    }
+}
+
+extension ViewController: RenderARDelegate {
+    func frame(didRender buffer: CVPixelBuffer, with time: CMTime, using rawBuffer: CVPixelBuffer) {
+        liveStreamManager.processVideoPixelBuffer(buffer, timeInfor: time)
+    }
+}
