@@ -25,21 +25,25 @@ class ViewController: UIViewController {
         super.viewDidLoad()
         
         setupARRecord()
-        arFilterManager = ARFilterManager()
         setupAR()
         setupLiveStream()
         observeStreamState()
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
-            self?.liveStreamManager.startStream()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            //self?.liveStreamManager.startStream()
+            ARFilterManager.shared.next()
+            
+            try? self?.previewView.startVideoRecording()
         }
     }
     
     private func setupARRecord() {
-        arRecorder = RecordAR(ARSceneKit: previewView)
-        arRecorder.renderAR = self
-        arRecorder.enableAudio = false
-        arRecorder.onlyRenderWhileRecording = false
+//        arRecorder = RecordAR(ARSceneKit: previewView)
+//        arRecorder.renderAR = self
+//        arRecorder.enableAudio = false
+//        arRecorder.onlyRenderWhileRecording = false
+        // scnrecoder setup
+        previewView.prepareForRecording()
     }
     
     private func setupLiveStream() {
@@ -50,11 +54,12 @@ class ViewController: UIViewController {
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        
-        arFilterManager.startPreview(previewView)
-        liveStreamManager.startAudioCapture()
+
+        ARFilterManager.shared.startPreview(previewView)
+
+        //liveStreamManager.startAudioCapture()
     }
-    
+
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         previewView.session.pause()
@@ -101,6 +106,6 @@ extension ViewController: LiveStreamManagerDelegate {
 
 extension ViewController: RenderARDelegate {
     func frame(didRender buffer: CVPixelBuffer, with time: CMTime, using rawBuffer: CVPixelBuffer) {
-        //liveStreamManager.processVideoPixelBuffer(buffer, timeInfor: time) // push live
+        liveStreamManager.processVideoPixelBuffer(buffer, timeInfor: time) // push live
     }
 }

@@ -7,6 +7,7 @@ target 'ARKitStream' do
 	pod 'ARVideoKit', '~> 1.5.51'
 	pod 'libksygpulive/KSYGPUResource'
 	pod 'libksygpulive/libksygpulive'
+  pod 'GPUImage', :path => './GPUImage'
   # Pods for ARKitStream
 
 end

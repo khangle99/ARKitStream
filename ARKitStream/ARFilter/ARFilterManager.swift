@@ -11,19 +11,32 @@ import ARVideoKit
 import GPUImage
 import VideoToolbox
 
-class ARFilterManager {
+class ARFilterManager: NSObject {
     private var configuration: ARFaceTrackingConfiguration!
-    
-    
+
+    public var selectIndex: Int? {
+        didSet {
+            if selectIndex != oldValue {
+                filterChange = true
+            }
+        }
+    }
+
     public static let shared = ARFilterManager()
-    
+
     private var semaphore: DispatchSemaphore = DispatchSemaphore(value: 0)
     private var rgbBuffer: CVPixelBuffer?
-    
+
     private var input: GPUImageMovie = GPUImageMovie(asset: nil)
     private var pipeline: GPUImageFilterPipeline!
-    
-    init() {
+
+    private let filters = ["GPUImageSmoothToonFilter","GPUImageSobelEdgeDetectionFilter","GPUImageiOSBlurFilter","GPUImageKuwaharaRadius3Filter","GPUImageGrayscaleFilter"]
+
+    private var filterChange: Bool = false
+    private var _index: Int = 0
+
+    override init() {
+        super.init()
         configure()
     }
     func configure() {
@@ -31,41 +44,36 @@ class ARFilterManager {
             fatalError("not support face tracking")
         }
         configuration = ARFaceTrackingConfiguration()
-        
+
         let outputFilter = GPUImageFilter()
-        
+
         pipeline = GPUImageFilterPipeline(orderedFilters: [], input: input, output: outputFilter)
-        
-        
+
+
         outputFilter.frameProcessingCompletionBlock = { [weak self] (filterOut: GPUImageOutput?, time: CMTime) -> Void in
-            
             let frameBuffer = filterOut?.framebufferForOutput()
-            
+
             guard let buffer = frameBuffer else {
                 return;
             }
-            
+
             glFinish()
-            
-            self?.rgbBuffer = buffer.renderTarget() // phat ra view
-//            if let buffer = self?.rgbBuffer {
-//                let image = UIImage(pixelBuffer: buffer)
-//                print("")
-//            }
-            
-            
+
+            self?.rgbBuffer = buffer.getRenderTarget()?.takeUnretainedValue() // phat ra view
+
             self?.semaphore.signal()
         }
+
     }
-    
-    public func process(pixelBuffer: CVPixelBuffer) -> Void {
-//        guard pipeline.filters.count > 0 || filterChange else {
-//            return
-//        }
+
+    @objc public func process(pixelBuffer: CVPixelBuffer) -> Void {
+        guard pipeline.filters.count > 0 || filterChange else {
+            return
+        }
         CVPixelBufferLockBaseAddress(pixelBuffer, [])
         let final_y_buffer = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0)?.assumingMemoryBound(to: uint8.self);
         let final_uv_buffer = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1)?.assumingMemoryBound(to: uint8.self);
-        input.processMovieFrame(createSampleBufferFrom(pixelBuffer: pixelBuffer))
+        input.processMovieFrame(pixelBuffer, withSampleTime: .zero)
         //input.processMovieFrame(pixelBuffer, withSampleTime: .zero) // pass to gpuimage process
         _ = semaphore.wait(timeout: .distantFuture) // wait cho toi khi rgbBuffer update after filter
         CVPixelBufferLockBaseAddress(rgbBuffer!, [])
@@ -76,28 +84,66 @@ class ARFilterManager {
         ARGBToNV12(rgbAddress, Int32(width*4), final_y_buffer, Int32(width), final_uv_buffer, Int32(width), Int32(width), Int32(height))
         CVPixelBufferUnlockBaseAddress(rgbBuffer!, [])
         CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
-//        if filterChange {
-//            switchFilter()
-//        }
+        if filterChange {
+            switchFilter()
+        }
     }
-    
+
+    private func switchFilter() -> Void {
+        filterChange = false
+        if let index = selectIndex {
+            if (index >= filters.count) {
+                selectIndex = nil
+                _index = 0
+                return
+            }
+            pipeline.removeAllFilters()
+            if let _filter = filter(name: filters[index]) as? (GPUImageOutput & GPUImageInput) {
+                pipeline.addFilter(_filter)
+            }
+        }else{
+            pipeline.removeAllFilters()
+        }
+    }
+
+    func next() {
+        selectIndex = _index
+        _index += 1
+    }
+
+    private func filter(name: String) -> GPUImageInput? {
+        guard let typeClass = NSClassFromString(name) else {
+            return nil
+        }
+        if let cls = typeClass as? GPUImageFilter.Type {
+            return cls.init()
+        }else if let cls = typeClass as? GPUImageFilterGroup.Type {
+            return cls.init()
+        }
+        return nil
+    }
+
+    @objc open class func sharedInstance() -> ARFilterManager {
+        return ARFilterManager.shared
+    }
+
     func startPreview(_ previewView: ARSCNView) {
         previewView.session = ZARSession()
-        previewView.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
+        previewView.session.run(configuration, options: [])
     }
-    
+
     func stopPreview() {
-        
+
     }
-    
+
     // convert pixel to sample
     func createSampleBufferFrom(pixelBuffer: CVPixelBuffer) -> CMSampleBuffer? {
         var sampleBuffer: CMSampleBuffer?
-        
+
         var timimgInfo  = CMSampleTimingInfo()
         var formatDescription: CMFormatDescription? = nil
         CMVideoFormatDescriptionCreateForImageBuffer(allocator: kCFAllocatorDefault, imageBuffer: pixelBuffer, formatDescriptionOut: &formatDescription)
-        
+
         let osStatus = CMSampleBufferCreateReadyWithImageBuffer(
           allocator: kCFAllocatorDefault,
           imageBuffer: pixelBuffer,
@@ -105,7 +151,7 @@ class ARFilterManager {
           sampleTiming: &timimgInfo,
           sampleBufferOut: &sampleBuffer
         )
-        
+
         // Print out errors
         if osStatus == kCMSampleBufferError_AllocationFailed {
           print("osStatus == kCMSampleBufferError_AllocationFailed")
@@ -158,35 +204,15 @@ class ARFilterManager {
         if osStatus == kCMSampleBufferError_DataCanceled {
           print("osStatus == kCMSampleBufferError_DataCanceled")
         }
-        
+
         guard let buffer = sampleBuffer else {
           print("Cannot create sample buffer")
           return nil
         }
-        
+
         return buffer
       }
 }
-
-
-extension GPUImageFramebuffer {
-    func renderTarget() -> CVPixelBuffer {
-        return self.value(forKey: "renderTarget") as! CVPixelBuffer
-    }
-}
-extension UIImage {
-    public convenience init?(pixelBuffer: CVPixelBuffer) {
-        var cgImage: CGImage?
-        VTCreateCGImageFromCVPixelBuffer(pixelBuffer, options: nil, imageOut: &cgImage)
-
-        guard let cgImage = cgImage else {
-            return nil
-        }
-
-        self.init(cgImage: cgImage)
-    }
-}
-
 
 class ZARSession: ARSession {
     override var currentFrame: ARFrame? {

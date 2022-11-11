@@ -3,3 +3,6 @@
 //
 
 #import "libyuv.h"
+#import "MTDMulticastDelegate.h"
+#import "MTDOriginMulticastDelegate.h"
+#import "YUGPUImageCVPixelBufferInput.h"
